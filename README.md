@@ -350,7 +350,7 @@ python3 main.py
 | `LOG_FILE` | `string` | `"cfnb.log"` | 运行日志文件名（仅在启用日志时生效） |
 
 <details>
-<summary>🔧 高级参数（可用性 / 带宽 / 并发 / 重试 / 广告/ 输出）</summary>
+<summary>🔧 高级参数（可用性 /HTTP / 带宽 / 并发 / 重试 / 广告/ 输出）</summary>
 
 **可用性检测参数**
 
@@ -797,6 +797,8 @@ git branch -M $(git remote show origin | grep "HEAD branch" | cut -d " " -f5) 2>
 
 **14. 带宽测速全部失败**  
 若 curl 测速多次重试仍无有效带宽数据，程序将回退到 TCP 延迟排序结果作为最终优选节点，并发送微信通知。
+
+</details>
 
 </details>
 <summary>🔒 隐私与其他</summary>
