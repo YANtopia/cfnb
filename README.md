@@ -11,7 +11,7 @@
 
 > ⭐ **如果觉得好用，点个 Star 支持一下～**
 
-这是一个全自动的 **Cloudflare CDN 节点优选工具**。它通过 **TCP 延迟筛选** + **IP 可用性二次检测** + **真实带宽测速** 三重机制，从多个公开数据源中聚合节点，自动识别并解析任意格式（标准代码、中文名、emoji国旗、JSON等），筛选出当前网络环境下速度最快、可用性最高的 Cloudflare IP，并支持**自动更新至 Cloudflare DNS** 以及**同步至 GitHub 仓库**，同时支持微信实时通知。
+这是一个全自动的 **Cloudflare CDN 节点优选工具**。它通过 **TCP 延迟筛选** + **IP 可用性二次检测** + **HTTP Server 检测** + **真实带宽测速** 四重机制，从多个公开数据源中聚合节点，自动识别并解析任意格式（标准代码、中文名、emoji国旗、JSON等），筛选出当前网络环境下速度最快、可用性最高的 Cloudflare IP，并支持**自动更新至 Cloudflare DNS** 以及**同步至 GitHub 仓库**，同时支持微信实时通知。
 
 > [!IMPORTANT]
 > **跨平台支持**：本工具同时兼容 **Windows** 和 **Linux** 操作系统。
@@ -39,6 +39,7 @@
 | 🌐 **多模式筛选** | 全局最优 TopN / 分国家最优 TopN |
 | ⚡ **TCP 连接测试** | 并发测延迟，可设成功率阈值 |
 | 🔍 **可用性二次检测** | API 验证代理能力 |
+| 🔍 **HTTP Server 检测** | 探测 Server 响应头，自动过滤 nginx 节点，提升代理兼容性 |
 | 📶 **真实带宽测速** | curl 下载测速，实测吞吐量 |
 | 🧩 **多源自适应聚合** | 支持多个数据源，自动识别并解析任意格式（标准代码、中文名、emoji国旗、JSON等），统一转换为标准格式 |
 | ⚙️ **前置过滤（按序执行）** | TCP 测试前按序：端口过滤 → 黑名单过滤 → 白名单过滤（均可开关） |
@@ -364,6 +365,21 @@ python3 main.py
 | `FILTER_IPV6_AVAILABILITY` | `boolean` | `true` | **仅作用于 DNS**：是否过滤落地仅 IPv6 的节点（`ipv6_only`） |
 
 > 💡 IPv6 过滤逻辑：通过 API 返回的 `inferred_stack` 判断，仅淘汰 `ipv6_only` 节点，保留 `ipv4_only` 和 `dual_stack` 节点。
+
+**HTTP 检测参数**
+
+| 参数 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `HTTP_TEST_ENABLED` | `boolean` | `true` | 是否启用 HTTP Server 检测（过滤 Server 为 nginx 的节点） |
+| `HTTP_TEST_TIMEOUT` | `int` | `3` | 单次 HTTP 请求超时（秒） |
+| `HTTP_TEST_MAX_RETRIES` | `int` | `2` | 单节点 HTTP 请求超时重试次数 |
+| `HTTP_TEST_RETRY_DELAY` | `int` | `3` | HTTP 请求重试间隔（秒） |
+| `HTTP_TEST_WORKERS` | `int` | `10` | HTTP 检测并发线程数 |
+| `HTTP_TEST_METHOD` | `string` | `"HEAD"` | 请求方法（`GET` 或 `HEAD`，推荐 `HEAD` 更轻量且隐蔽） |
+| `HTTP_TEST_MAX_ROUNDS` | `int` | `2` | 整体失败（通过率为0）时的最大重试轮数 |
+| `HTTP_TEST_ROUND_DELAY` | `int` | `3` | 整体重试间隔（秒） |
+
+> 💡 HTTP 检测在可用性检测之后、带宽测速之前执行，仅淘汰 `Server: nginx` 的节点，其余均视为可用。
 
 **带宽测速参数**
 
@@ -770,15 +786,22 @@ git branch -M $(git remote show origin | grep "HEAD branch" | cut -d " " -f5) 2>
 <details>
 <summary>🔍 检测与过滤</summary>
 
-11. **可用性检测全部失败**  
-   若 API 接口异常，程序会自动跳过此步骤并回退到 TCP 筛选结果，同时发送微信提醒（如已配置）。
+**11. TCP 测试无节点通过**  
+若所有节点的 TCP 连接成功率均低于 `MIN_SUCCESS_RATE`，程序将直接退出并提示检查网络或降低成功率阈值。此为第一道硬性门槛，无回退机制。
+
+**12. 可用性检测全部失败**  
+若 API 接口异常导致可用性检测通过率为 0%，程序会自动跳过此步骤并回退到 TCP 筛选结果，同时发送微信提醒（如已配置）。
+
+**13. HTTP Server 检测全部失败**  
+若所有候选节点均返回 `nginx` 或连接失败，程序将降级使用过滤前列表（即可用性检测通过的结果），并发送微信通知（如已启用）。
+
+**14. 带宽测速全部失败**  
+若 curl 测速多次重试仍无有效带宽数据，程序将回退到 TCP 延迟排序结果作为最终优选节点，并发送微信通知。
 
 </details>
-
-<details>
 <summary>🔒 隐私与其他</summary>
 
-12. **隐私保护**  
+15. **隐私保护**  
    自动生成的 `.gitignore` 文件会忽略 `config.json`、`git_sync.ps1` 和 `git_sync.sh`，防止敏感信息被提交到公开仓库。
 
 </details>
