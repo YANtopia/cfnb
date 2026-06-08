@@ -224,7 +224,7 @@ def load_config():
         "HTTP_TEST_TIMEOUT": 3,
         "HTTP_TEST_MAX_RETRIES": 2,
         "HTTP_TEST_RETRY_DELAY": 3,
-        "HTTP_TEST_WORKERS": 10,
+        "HTTP_TEST_WORKERS": 32,
         "HTTP_TEST_METHOD": "HEAD",
         "HTTP_TEST_MAX_ROUNDS": 2,
         "HTTP_TEST_ROUND_DELAY": 3,

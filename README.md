@@ -249,7 +249,7 @@ python3 main.py
 ## ⚙️ 配置说明（完整参数详解）
 
 > [!NOTE]
-> 默认参数基于 **2核2G 云服务器** 测试通过。若在 **软路由、树莓派或低配 PC** 上运行，建议适当降低 `MAX_WORKERS`、`BANDWIDTH_WORKERS`。
+> 默认参数基于 **2核2G 云服务器** 测试通过。若在 **软路由、树莓派或低配 PC** 上运行，建议适当降低 `MAX_WORKERS`、`HTTP_TEST_WORKERS`、`BANDWIDTH_WORKERS`。
 
 所有参数均位于 `config.json`，以下为逐项说明。
 
@@ -374,7 +374,7 @@ python3 main.py
 | `HTTP_TEST_TIMEOUT` | `int` | `3` | 单次 HTTP 请求超时（秒） |
 | `HTTP_TEST_MAX_RETRIES` | `int` | `2` | 单节点 HTTP 请求超时重试次数 |
 | `HTTP_TEST_RETRY_DELAY` | `int` | `3` | HTTP 请求重试间隔（秒） |
-| `HTTP_TEST_WORKERS` | `int` | `10` | HTTP 检测并发线程数 |
+| `HTTP_TEST_WORKERS` | `int` | `32` | HTTP 检测并发线程数 |
 | `HTTP_TEST_METHOD` | `string` | `"HEAD"` | 请求方法（`GET` 或 `HEAD`，推荐 `HEAD` 更轻量且隐蔽） |
 | `HTTP_TEST_MAX_ROUNDS` | `int` | `2` | 整体失败（通过率为0）时的最大重试轮数 |
 | `HTTP_TEST_ROUND_DELAY` | `int` | `3` | 整体重试间隔（秒） |
