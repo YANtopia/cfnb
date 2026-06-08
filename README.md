@@ -800,10 +800,10 @@ git branch -M $(git remote show origin | grep "HEAD branch" | cut -d " " -f5) 2>
 
 </details>
 
-</details>
+<details>
 <summary>🔒 隐私与其他</summary>
 
-15. **隐私保护**  
+**15. 隐私保护**  
    自动生成的 `.gitignore` 文件会忽略 `config.json`、`git_sync.ps1` 和 `git_sync.sh`，防止敏感信息被提交到公开仓库。
 
 </details>
