@@ -784,13 +784,13 @@ def http_server_filter(candidates, config):
     if not config.get("HTTP_TEST_ENABLED", False) or not candidates:
         return candidates
 
-    timeout = config.get("HTTP_TEST_TIMEOUT", 3)
-    max_retries = config.get("HTTP_TEST_MAX_RETRIES", 2)
-    retry_delay = config.get("HTTP_TEST_RETRY_DELAY", 3)
-    workers = config.get("HTTP_TEST_WORKERS", 10)
-    method = config.get("HTTP_TEST_METHOD", "GET")
-    max_rounds = config.get("HTTP_TEST_MAX_ROUNDS", 2)
-    round_delay = config.get("HTTP_TEST_ROUND_DELAY", 3)
+    timeout = HTTP_TEST_TIMEOUT
+    max_retries = HTTP_TEST_MAX_RETRIES
+    retry_delay = HTTP_TEST_RETRY_DELAY
+    workers = HTTP_TEST_WORKERS
+    method = HTTP_TEST_METHOD
+    max_rounds = HTTP_TEST_MAX_ROUNDS
+    round_delay = HTTP_TEST_ROUND_DELAY
 
     for round_num in range(1, max_rounds + 1):
         print(f"\n[HTTP检测] 第 {round_num} 轮检测...")
