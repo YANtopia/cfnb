@@ -39,7 +39,7 @@
 | 🌐 **多模式筛选** | 全局最优 TopN / 分国家最优 TopN |
 | ⚡ **TCP 连接测试** | 并发测延迟，可设成功率阈值 |
 | 🔍 **可用性二次检测** | API 验证代理能力 |
-| 🔍 **HTTP Server 检测** | 探测 Server 响应头，自动过滤 nginx 节点，提升代理兼容性 |
+| 🔍 **HTTP Server 检测** | 探测 Server 响应头，过滤非Cloudflare节点，提升代理兼容性 |
 | 📶 **真实带宽测速** | curl 下载测速，实测吞吐量 |
 | 🧩 **多源自适应聚合** | 支持多个数据源，自动识别并解析任意格式（标准代码、中文名、emoji国旗、JSON等），统一转换为标准格式 |
 | ⚙️ **前置过滤（按序执行）** | TCP 测试前按序：端口过滤 → 黑名单过滤 → 白名单过滤（均可开关） |
@@ -370,7 +370,7 @@ python3 main.py
 
 | 参数 | 类型 | 默认值 | 说明 |
 | :--- | :--- | :--- | :--- |
-| `HTTP_TEST_ENABLED` | `boolean` | `true` | 是否启用 HTTP Server 检测（过滤 Server 为 nginx 的节点） |
+| `HTTP_TEST_ENABLED` | `boolean` | `true` | 是否启用 HTTP Server 检测（过滤 Server 非Cloudflare 的节点） |
 | `HTTP_TEST_TIMEOUT` | `int` | `3` | 单次 HTTP 请求超时（秒） |
 | `HTTP_TEST_MAX_RETRIES` | `int` | `2` | 单节点 HTTP 请求超时重试次数 |
 | `HTTP_TEST_RETRY_DELAY` | `int` | `3` | HTTP 请求重试间隔（秒） |
@@ -379,7 +379,7 @@ python3 main.py
 | `HTTP_TEST_MAX_ROUNDS` | `int` | `2` | 整体失败（通过率为0）时的最大重试轮数 |
 | `HTTP_TEST_ROUND_DELAY` | `int` | `3` | 整体重试间隔（秒） |
 
-> 💡 HTTP 检测在可用性检测之后、带宽测速之前执行，仅淘汰 `Server: nginx` 的节点，其余均视为可用。
+> 💡 HTTP 检测在可用性检测之后、带宽测速之前执行，仅淘汰不等于 `Code: 400` 和 `Server: nginx` 的节点，其余均视为可用。
 
 **带宽测速参数**
 
@@ -715,7 +715,7 @@ git branch -M $(git remote show origin | grep "HEAD branch" | cut -d " " -f5) 2>
 | 测试阶段 | 是否走代理 | 说明 |
 | :--- | :--- | :--- |
 | TCP 延迟测试 (Socket) | ❌ 直连 | 反映本机到节点的 RTT |
-| HTTP 检测 (requests) | ✅ 跟随系统代理 | 过滤 Server 为 nginx 的节点 |
+| HTTP 检测 (requests) | ✅ 跟随系统代理 | 过滤非Cloudflare节点 |
 | 带宽测速 (curl) | ❌ 直连 | 反映本机到 CDN 的速度 |
 | API 请求类 (requests) | ✅ 跟随系统代理 | 获取节点、可用性、微信通知等 |
 | Git 推送 (git) | ✅ 跟随系统代理 | 涉及 `github.com` 等 |
@@ -794,7 +794,7 @@ git branch -M $(git remote show origin | grep "HEAD branch" | cut -d " " -f5) 2>
 若 API 接口异常导致可用性检测通过率为 0%，程序会自动跳过此步骤并回退到 TCP 筛选结果，同时发送微信提醒（如已配置）。
 
 13. **HTTP Server 检测全部失败**  
-若所有候选节点均返回 `nginx` 或连接失败，程序将降级使用过滤前列表（即可用性检测通过的结果），并发送微信通知（如已启用）。
+若所有候选节点均返回非 `400` / `nginx` 或连接失败，程序将降级使用过滤前列表（即可用性检测通过的结果），并发送微信通知（如已启用）。
 
 14. **带宽测速全部失败**  
 若 curl 测速多次重试仍无有效带宽数据，程序将回退到 TCP 延迟排序结果作为最终优选节点，并发送微信通知。
