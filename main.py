@@ -714,10 +714,10 @@ def check_http_server(node_str, timeout, max_retries, retry_delay, method):
             if resp.status_code != 400:
                 return (node_str, False, f"status_{resp.status_code}")
             server = resp.headers.get("server", "")
-            if server.lower().startswith("nginx"):
-                return (node_str, False, server)
-            else:
+            if server.lower().startswith("cloudflare"):
                 return (node_str, True, server)
+            else:
+                return (node_str, False, server)
         except requests.exceptions.Timeout:
             if attempt < max_retries:
                 time.sleep(retry_delay)
