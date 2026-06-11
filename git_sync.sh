@@ -8,13 +8,26 @@
 
 # ==================== GitHub 认证信息（请修改为你的信息） ====================
 # 个人访问令牌（Personal Access Token），用于身份验证
-github_token="your_github_personal_access_token_here"
+github_token="YOUR_GITHUB_TOKEN_HERE"
 # GitHub 用户名
-github_username="your_github_username"
+github_username="YANtopia"
 # 仓库名称
-repo_name="your_repo_name"
+repo_name="cfnb"
 # 目标分支
-branch="your_branch"
+branch="main"
+
+# ==================== 代理设置 ====================
+# 保存当前代理设置
+_OLD_HTTP_PROXY="$http_proxy"
+_OLD_HTTPS_PROXY="$https_proxy"
+_OLD_ALL_PROXY="$ALL_PROXY"
+
+# 设置代理（如果未设置）
+if [ -z "$http_proxy" ]; then
+  export http_proxy="http://127.0.0.1:7890"
+  export https_proxy="http://127.0.0.1:7890"
+  export ALL_PROXY="http://127.0.0.1:7890"
+fi
 
 # ==================== 切换到脚本所在目录 ====================
 cd "$(dirname "$0")" || exit 1
@@ -29,5 +42,11 @@ git commit -m "$commit_msg"
 
 # ==================== 强制推送到 GitHub ====================
 git push "https://${github_token}@github.com/${github_username}/${repo_name}.git" "$branch" --force
+
+# ==================== 恢复代理设置 ====================
+export http_proxy="$_OLD_HTTP_PROXY"
+export https_proxy="$_OLD_HTTPS_PROXY"
+export ALL_PROXY="$_OLD_ALL_PROXY"
+export HTTP_PROXY="$http_proxy" HTTPS_PROXY="$https_proxy" all_proxy="$ALL_PROXY"
 
 echo "✅ ip.txt 已推送到 GitHub"
