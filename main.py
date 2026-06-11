@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Cloudflare IP 优选工具 (TCP筛选 + IP可用性二次筛选 + curl带宽测速 + WxPusher通知)
+Cloudflare IP 优选工具 (TCP筛选 + IP可用性二次筛选 + HTTP检测 + curl带宽测速 + WxPusher通知)
 依赖：requests, curl (系统自带)
 配置文件：同目录下的 config.json（请根据需要修改参数）
 结果保存到 ip.txt，并自动推送到 GitHub，同时批量更新到 Cloudflare DNS
@@ -19,6 +19,10 @@ import shutil
 import json
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib3.exceptions import InsecureRequestWarning
+
+# 禁用 SSL 警告 (用于 HTTP 检测)
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 # ==================== 预编译正则 ====================
 NODE_PATTERN = re.compile(r"^(\d+\.\d+\.\d+\.\d+):(\d+)#(.+)$")
@@ -97,6 +101,64 @@ CN_TO_CODE = {
     "赞比亚": "ZM", "津巴布韦": "ZW",
 }
 
+# 三位字母国家代码 → 两位字母国家代码（ISO 3166-1 alpha-3 → alpha-2）
+ALPHA3_TO_ALPHA2 = {
+    "AFG": "AF", "ALA": "AX", "ALB": "AL", "DZA": "DZ", "ASM": "AS",
+    "AND": "AD", "AGO": "AO", "AIA": "AI", "ATA": "AQ", "ATG": "AG",
+    "ARG": "AR", "ARM": "AM", "ABW": "AW", "AUS": "AU", "AUT": "AT",
+    "AZE": "AZ", "BHS": "BS", "BHR": "BH", "BGD": "BD", "BRB": "BB",
+    "BLR": "BY", "BEL": "BE", "BLZ": "BZ", "BEN": "BJ", "BMU": "BM",
+    "BTN": "BT", "BOL": "BO", "BIH": "BA", "BWA": "BW", "BVT": "BV",
+    "BRA": "BR", "IOT": "IO", "BRN": "BN", "BGR": "BG", "BFA": "BF",
+    "BDI": "BI", "KHM": "KH", "CMR": "CM", "CAN": "CA", "CPV": "CV",
+    "CYM": "KY", "CAF": "CF", "TCD": "TD", "CHL": "CL", "CHN": "CN",
+    "CXR": "CX", "CCK": "CC", "COL": "CO", "COM": "KM", "COG": "CG",
+    "COD": "CD", "COK": "CK", "CRI": "CR", "CIV": "CI", "HRV": "HR",
+    "CUB": "CU", "CYP": "CY", "CZE": "CZ", "DNK": "DK", "DJI": "DJ",
+    "DMA": "DM", "DOM": "DO", "ECU": "EC", "EGY": "EG", "SLV": "SV",
+    "GNQ": "GQ", "ERI": "ER", "EST": "EE", "ETH": "ET", "FLK": "FK",
+    "FRO": "FO", "FJI": "FJ", "FIN": "FI", "FRA": "FR", "GUF": "GF",
+    "PYF": "PF", "ATF": "TF", "GAB": "GA", "GMB": "GM", "GEO": "GE",
+    "DEU": "DE", "GHA": "GH", "GIB": "GI", "GRC": "GR", "GRL": "GL",
+    "GRD": "GD", "GLP": "GP", "GUM": "GU", "GTM": "GT", "GGY": "GG",
+    "GIN": "GN", "GNB": "GW", "GUY": "GY", "HTI": "HT", "HMD": "HM",
+    "VAT": "VA", "HND": "HN", "HKG": "HK", "HUN": "HU", "ISL": "IS",
+    "IND": "IN", "IDN": "ID", "IRN": "IR", "IRQ": "IQ", "IRL": "IE",
+    "IMN": "IM", "ISR": "IL", "ITA": "IT", "JAM": "JM", "JPN": "JP",
+    "JEY": "JE", "JOR": "JO", "KAZ": "KZ", "KEN": "KE", "KIR": "KI",
+    "PRK": "KP", "KOR": "KR", "KWT": "KW", "KGZ": "KG", "LAO": "LA",
+    "LVA": "LV", "LBN": "LB", "LSO": "LS", "LBR": "LR", "LBY": "LY",
+    "LIE": "LI", "LTU": "LT", "LUX": "LU", "MAC": "MO", "MKD": "MK",
+    "MDG": "MG", "MWI": "MW", "MYS": "MY", "MDV": "MV", "MLI": "ML",
+    "MLT": "MT", "MHL": "MH", "MTQ": "MQ", "MRT": "MR", "MUS": "MU",
+    "MYT": "YT", "MEX": "MX", "FSM": "FM", "MDA": "MD", "MCO": "MC",
+    "MNG": "MN", "MNE": "ME", "MSR": "MS", "MAR": "MA", "MOZ": "MZ",
+    "MMR": "MM", "NAM": "NA", "NRU": "NR", "NPL": "NP", "NLD": "NL",
+    "NCL": "NC", "NZL": "NZ", "NIC": "NI", "NER": "NE", "NGA": "NG",
+    "NIU": "NU", "NFK": "NF", "MNP": "MP", "NOR": "NO", "OMN": "OM",
+    "PAK": "PK", "PLW": "PW", "PSE": "PS", "PAN": "PA", "PNG": "PG",
+    "PRY": "PY", "PER": "PE", "PHL": "PH", "PCN": "PN", "POL": "PL",
+    "PRT": "PT", "PRI": "PR", "QAT": "QA", "REU": "RE", "ROU": "RO",
+    "RUS": "RU", "RWA": "RW", "BLM": "BL", "SHN": "SH", "KNA": "KN",
+    "LCA": "LC", "MAF": "MF", "SPM": "PM", "VCT": "VC", "WSM": "WS",
+    "SMR": "SM", "STP": "ST", "SAU": "SA", "SEN": "SN", "SRB": "RS",
+    "SYC": "SC", "SLE": "SL", "SGP": "SG", "SXM": "SX", "SVK": "SK",
+    "SVN": "SI", "SLB": "SB", "SOM": "SO", "ZAF": "ZA", "SGS": "GS",
+    "SSD": "SS", "ESP": "ES", "LKA": "LK", "SDN": "SD", "SUR": "SR",
+    "SJM": "SJ", "SWZ": "SZ", "SWE": "SE", "CHE": "CH", "SYR": "SY",
+    "TWN": "TW", "TJK": "TJ", "TZA": "TZ", "THA": "TH", "TLS": "TL",
+    "TGO": "TG", "TKL": "TK", "TON": "TO", "TTO": "TT", "TUN": "TN",
+    "TUR": "TR", "TKM": "TM", "TCA": "TC", "TUV": "TV", "UGA": "UG",
+    "UKR": "UA", "ARE": "AE", "GBR": "GB", "USA": "US", "UMI": "UM",
+    "URY": "UY", "UZB": "UZ", "VUT": "VU", "VEN": "VE", "VNM": "VN",
+    "VGB": "VG", "VIR": "VI", "WLF": "WF", "ESH": "EH", "YEM": "YE",
+    "ZMB": "ZM", "ZWE": "ZW",
+}
+
+# 构建两位有效代码集合，用于快速校验
+CODE_SET = set(CN_TO_CODE.values())
+
+
 # ==================== 加载配置文件 ====================
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
@@ -158,6 +220,14 @@ def load_config():
         "AVAILABILITY_CONNECT_TIMEOUT": 3,
         "AVAILABILITY_RETRY_MAX": 2,
         "AVAILABILITY_RETRY_DELAY": 3,
+        "HTTP_TEST_ENABLED": True,
+        "HTTP_TEST_TIMEOUT": 3,
+        "HTTP_TEST_MAX_RETRIES": 2,
+        "HTTP_TEST_RETRY_DELAY": 3,
+        "HTTP_TEST_WORKERS": 32,
+        "HTTP_TEST_METHOD": "HEAD",
+        "HTTP_TEST_MAX_ROUNDS": 2,
+        "HTTP_TEST_ROUND_DELAY": 3,
         "FILTER_IPV6_AVAILABILITY": True,
         "FILTER_BLOCKED_COUNTRIES_ENABLED": True,
         "BLOCKED_COUNTRIES": [
@@ -247,6 +317,14 @@ AVAILABILITY_TIMEOUT = cfg["AVAILABILITY_TIMEOUT"]
 AVAILABILITY_CONNECT_TIMEOUT = cfg["AVAILABILITY_CONNECT_TIMEOUT"]
 AVAILABILITY_RETRY_MAX = cfg["AVAILABILITY_RETRY_MAX"]
 AVAILABILITY_RETRY_DELAY = cfg["AVAILABILITY_RETRY_DELAY"]
+HTTP_TEST_ENABLED = cfg["HTTP_TEST_ENABLED"]
+HTTP_TEST_TIMEOUT = cfg["HTTP_TEST_TIMEOUT"]
+HTTP_TEST_MAX_RETRIES = cfg["HTTP_TEST_MAX_RETRIES"]
+HTTP_TEST_RETRY_DELAY = cfg["HTTP_TEST_RETRY_DELAY"]
+HTTP_TEST_WORKERS = cfg["HTTP_TEST_WORKERS"]
+HTTP_TEST_METHOD = cfg["HTTP_TEST_METHOD"]
+HTTP_TEST_MAX_ROUNDS = cfg["HTTP_TEST_MAX_ROUNDS"]
+HTTP_TEST_ROUND_DELAY = cfg["HTTP_TEST_ROUND_DELAY"]
 FILTER_IPV6_AVAILABILITY = cfg["FILTER_IPV6_AVAILABILITY"]
 FILTER_BLOCKED_COUNTRIES_ENABLED = cfg["FILTER_BLOCKED_COUNTRIES_ENABLED"]
 BLOCKED_COUNTRIES = cfg["BLOCKED_COUNTRIES"]
@@ -372,20 +450,26 @@ def get_ip_risk_level(ip):
 
 # ==================== 自适应多数据源解析引擎 ====================
 def extract_country_code(label):
-    """从任意标签中提取标准两位国家代码（支持纯代码、中文名、emoji国旗、混合无关文字）"""
+    """从任意标签中提取标准两位国家代码（支持两位代码、三位代码映射、中文名、emoji国旗、混合无关文字）"""
     label = label.strip()
     if not label:
         return None
 
     tokens = re.split(r'[\s,;|/]+', label)
 
-    # 1. 优先找标准两位大写字母代码
+    # 遍历每个 token，优先匹配三位/两位大写字母代码（后面不能紧跟英文字母）
     for token in tokens:
         token_cleaned = re.sub(r'^[\d\s\-_.|#]+', '', token.strip())
-        if re.match(r'^[A-Z]{2}$', token_cleaned):
-            return token_cleaned
+        # 优先检查三位代码
+        m3 = re.match(r'^([A-Z]{3})(?![A-Za-z])', token_cleaned)
+        if m3 and m3.group(1) in ALPHA3_TO_ALPHA2:
+            return ALPHA3_TO_ALPHA2[m3.group(1)]
+        # 再检查两位代码
+        m2 = re.match(r'^([A-Z]{2})(?![A-Za-z])', token_cleaned)
+        if m2 and m2.group(1) in CODE_SET:
+            return m2.group(1)
 
-    # 2. 对每个 token 尝试提取中文名
+    # 对每个 token 尝试提取中文名
     for token in tokens:
         token_cleaned = re.sub(r'^[\d\s\-_.|#]+', '', token)
         token_no_emoji = re.sub(r'[\U0001F1E6-\U0001F1FF]', '', token_cleaned).strip()
@@ -396,7 +480,7 @@ def extract_country_code(label):
             if code:
                 return code
 
-    # 3. 解码纯 emoji 国旗
+    # 解码纯 emoji 国旗
     emoji_chars = [c for c in label if '\U0001F1E6' <= c <= '\U0001F1FF']
     if len(emoji_chars) >= 2 and len(emoji_chars) % 2 == 0:
         first = ord(emoji_chars[0]) - 0x1F1E6
@@ -611,6 +695,38 @@ def check_availability(node_str):
 
     return (node_str, success, best_stack, best_exit_info)
 
+def check_http_server(node_str, timeout, max_retries, retry_delay, method):
+    m = IP_PORT_PATTERN.match(node_str)
+    if not m:
+        return (node_str, False, "parse_error")
+    ip, port = m.group(1), m.group(2)
+    url = f"http://{ip}:{port}/cdn-cgi/trace"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    }
+
+    for attempt in range(max_retries + 1):
+        try:
+            if method.upper() == "HEAD":
+                resp = requests.head(url, timeout=timeout, verify=False, allow_redirects=False, headers=headers)
+            else:
+                resp = requests.get(url, timeout=timeout, verify=False, allow_redirects=False, headers=headers)
+            if resp.status_code != 400:
+                return (node_str, False, f"status_{resp.status_code}")
+            server = resp.headers.get("server", "")
+            if server.lower().startswith("cloudflare"):
+                return (node_str, True, server)
+            else:
+                return (node_str, False, server)
+        except requests.exceptions.Timeout:
+            if attempt < max_retries:
+                time.sleep(retry_delay)
+                continue
+            else:
+                return (node_str, False, "timeout")
+        except Exception:
+            return (node_str, False, "connection_error")
+
 def availability_filter_candidates(candidates):
     if not TEST_AVAILABILITY or not candidates:
         return candidates, {}, {}
@@ -662,6 +778,59 @@ def availability_filter_with_retry(candidates):
         summary="可用性检测全部失败"
     )
     return candidates, {}, {}
+
+def http_server_filter(candidates, config):
+    """并发 HTTP 检测，支持整体失败重试，全部失败时降级并通知"""
+    if not config.get("HTTP_TEST_ENABLED", False) or not candidates:
+        return candidates
+
+    timeout = HTTP_TEST_TIMEOUT
+    max_retries = HTTP_TEST_MAX_RETRIES
+    retry_delay = HTTP_TEST_RETRY_DELAY
+    workers = HTTP_TEST_WORKERS
+    method = HTTP_TEST_METHOD
+    max_rounds = HTTP_TEST_MAX_ROUNDS
+    round_delay = HTTP_TEST_ROUND_DELAY
+
+    for round_num in range(1, max_rounds + 1):
+        print(f"\n[HTTP检测] 第 {round_num} 轮检测...")
+        print(f"\n对 {len(candidates)} 个候选节点进行 HTTP 二次筛选...")
+
+        passed = []
+        total = len(candidates)
+        completed = 0
+        last_print = time.time()
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            future_map = {
+                executor.submit(check_http_server, node, timeout, max_retries, retry_delay, method): node
+                for node in candidates
+            }
+            for future in as_completed(future_map):
+                node_str, valid, server = future.result()
+                completed += 1
+                if valid:
+                    passed.append(node_str)
+                now = time.time()
+                if now - last_print >= PROGRESS_PRINT_INTERVAL or completed == total:
+                    print(f"\r[HTTP检测] 进度：{completed}/{total} ({(completed/total)*100:.1f}%) 通过数量：{len(passed)}", end="", flush=True)
+                    last_print = now
+
+        print()
+        if passed:
+            print(f"HTTP检测通过 {len(passed)} 个节点")
+            return passed
+        elif round_num < max_rounds:
+            print(f"本轮 HTTP 检测通过率为 0%，等待 {round_delay} 秒后重试...")
+            time.sleep(round_delay)
+
+    # 全部轮次失败，降级
+    send_wxpusher_notification(
+        content=f"HTTP检测经 {max_rounds} 轮重试后仍无节点通过，已降级使用过滤前列表。",
+        summary="HTTP检测全部失败"
+    )
+    print(f"HTTP检测经 {max_rounds} 轮重试后仍无节点通过，降级使用过滤前候选列表。")
+    return candidates
 
 def measure_bandwidth_curl(node_str):
     m = IP_PORT_PATTERN.match(node_str)
@@ -1073,6 +1242,7 @@ def main():
     print(f"当前模式：{mode_str}，每个节点测试 {TCP_PROBES} 次 TCP 连接")
     print(f"最低成功率要求：{MIN_SUCCESS_RATE*100:.0f}%")
     print(f"IP 可用性二次筛选：{'启用' if TEST_AVAILABILITY else '禁用'}（仅对候选节点）")
+    print(f"HTTP检测：{'启用' if HTTP_TEST_ENABLED else '禁用'}（仅对候选节点）")
     print(f"IPv6 客户端 IP 过滤（仅作用于DNS更新环节）：{'启用' if FILTER_IPV6_AVAILABILITY else '禁用'}")
     print(f"DNS黑名单过滤：{'启用' if FILTER_BLOCKED_COUNTRIES_ENABLED else '禁用'}，黑名单国家：{', '.join(BLOCKED_COUNTRIES)}")
     print(f"IP 风险等级过滤：{'启用' if DNS_IP_RISK_FILTER_ENABLED else '禁用'}（最高允许：{DNS_IP_RISK_MAX_LEVEL}）")
@@ -1190,11 +1360,12 @@ def main():
         sys.exit(0)
 
     candidates_after_availability, avail_ip_info, avail_exit_details = availability_filter_with_retry(candidates)
+    candidates_after_http = http_server_filter(candidates_after_availability, cfg)
 
     bw_results = []
     for attempt in range(1, BANDWIDTH_RETRY_MAX + 1):
         print(f"\n[带宽测速] 第 {attempt} 轮测试...")
-        bw_results = bandwidth_filter(candidates_after_availability)
+        bw_results = bandwidth_filter(candidates_after_http)
         if bw_results:
             break
         if attempt < BANDWIDTH_RETRY_MAX:
